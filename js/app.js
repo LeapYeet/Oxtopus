@@ -6,9 +6,13 @@ import { h, hideTip } from './charts.js';
 import { state, store, hooks, ensureCatalog, parseAccount, sampleAccount, currentAgreement, clearUsage, loading, errorBox } from './core.js';
 import { viewNow } from './view-now.js';
 import { viewTariffs } from './view-tariffs.js';
-import { viewCompare, viewUsage } from './view-compare.js';
+import { viewCompare } from './view-compare.js';
+import { viewUsage } from './view-usage.js';
+import { viewSettings } from './view-settings.js';
 
-const VIEWS = { now: viewNow, tariffs: viewTariffs, compare: viewCompare, usage: viewUsage };
+const VIEWS = { now: viewNow, tariffs: viewTariffs, compare: viewCompare, usage: viewUsage, settings: viewSettings };
+// No hash means "home", which is whichever page the visitor chose as their start page.
+const viewFromHash = () => { const v = location.hash.slice(1); return VIEWS[v] ? v : state.prefs.start; };
 const main = document.getElementById('view');
 const regionSel = document.getElementById('region');
 let seq = 0;
@@ -27,7 +31,7 @@ async function render({ soft = false } = {}) {
     a.classList.toggle('on', on);
     if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   }
-  document.getElementById('acct-dot').classList.toggle('on', !!state.acct);
+  syncHeader();
   try {
     if (!state.cat) {
       if (!soft) root.append(loading('Loading tariffs from Octopus…'));
@@ -51,8 +55,15 @@ async function render({ soft = false } = {}) {
   }
 }
 
+/** Header state that depends on settings: the account dot, the settings button and where the logo leads. */
+function syncHeader() {
+  document.getElementById('acct-dot').classList.toggle('on', !!state.acct);
+  document.getElementById('settings-link').classList.toggle('on', state.view === 'settings');
+  document.querySelector('.brand').setAttribute('href', '#' + state.prefs.start);
+}
+
 function go(view) {
-  if (!VIEWS[view]) view = 'now';
+  if (!VIEWS[view]) view = state.prefs.start;
   if (location.hash !== '#' + view) { location.hash = view; return; }
   state.view = view;
   render();
@@ -60,8 +71,7 @@ function go(view) {
 }
 
 window.addEventListener('hashchange', () => {
-  const v = location.hash.slice(1);
-  state.view = VIEWS[v] ? v : 'now';
+  state.view = viewFromHash();
   render();
   window.scrollTo(0, 0);
 });
@@ -72,30 +82,25 @@ for (const [k, name] of Object.entries(T.REGIONS)) regionSel.append(h('option', 
 regionSel.value = state.region;
 regionSel.addEventListener('change', () => setRegion(regionSel.value));
 
-function setRegion(r) {
+function setRegion(r, { rerender = true } = {}) {
   if (!T.REGIONS[r]) return;
   state.region = r;
   regionSel.value = r;
   store.set('region', r);
-  render();
+  if (rerender) render();
 }
 
-const themeBtn = document.getElementById('theme');
 function applyTheme(t) {
   if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
   const dark = t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-  themeBtn.setAttribute('aria-label', dark ? 'Switch to light theme' : 'Switch to dark theme');
   document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#120b1d' : '#f6f3fa');
 }
-themeBtn.addEventListener('click', () => {
-  const dark = document.documentElement.dataset.theme
-    ? document.documentElement.dataset.theme === 'dark'
-    : matchMedia('(prefers-color-scheme: dark)').matches;
-  const next = dark ? 'light' : 'dark';
-  store.set('theme', next);
-  applyTheme(next);
-});
+function setTheme(t) {
+  if (t) store.set('theme', t); else store.del('theme');
+  applyTheme(t);
+}
 applyTheme(store.get('theme', null));
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme(store.get('theme', null)));
 
 /* ---------- account ---------- */
 
@@ -180,12 +185,28 @@ async function sample() {
   render();
 }
 
-Object.assign(hooks, { render: () => render(), go, connect, sample, disconnect });
+/** Forget everything this site has stored in the browser, then start again. */
+function reset() {
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('ox.')) localStorage.removeItem(k);
+    }
+    sessionStorage.removeItem(CREDS);
+  } catch { /* storage blocked: nothing was saved anyway */ }
+  location.hash = '';
+  location.reload();
+}
+
+Object.assign(hooks, {
+  render: () => render(), go, connect, sample, disconnect, header: syncHeader, setTheme, reset,
+  // From Settings the page should stay put, so only the stored region changes.
+  setRegion: (r) => setRegion(r, { rerender: false }),
+});
 
 /* ---------- boot ---------- */
 
-const v = location.hash.slice(1);
-state.view = VIEWS[v] ? v : 'now';
+state.view = viewFromHash();
 api.pruneCache();
 
 const saved = readCreds();
@@ -196,7 +217,7 @@ if (saved && saved.key && saved.account) {
     .catch((e) => { console.warn('Saved Octopus key no longer works:', e.message); })
     .finally(() => {
       state.connecting = null;
-      if (state.view === 'compare') render();
+      if (state.view === 'compare' || state.view === 'now' || state.view === 'settings') render({ soft: state.view === 'now' });
     });
 }
 render();

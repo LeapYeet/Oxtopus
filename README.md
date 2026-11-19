@@ -13,7 +13,8 @@ Unofficial. Not affiliated with or endorsed by Octopus Energy.
 | **Now** | The current Agile price, the next two days of half-hourly prices (import and export), the cheapest windows to run things, today's Tracker electricity and gas prices with 30 days of history, what every tariff charges this half hour, and the GB generation mix. |
 | **Tariffs** | Every Octopus product from the live API: unit rates, standing charge, gas rates, exit fees, and a 24-hour strip showing when each tariff is cheap. Filter by smart, EV, heating, solar and battery, fixed, export and more. |
 | **Compare** | What each tariff would cost for a typical home (pick annual usage and EV charging) or for your own readings, plus a chart of each tariff's rate through the day. |
-| **My usage** | Add your Octopus API key to see what you used, what it cost on the tariff you were actually on, when in the day you use it, and what every other tariff would have charged. Works for electricity, export and gas. |
+| **My usage** | Add your Octopus API key to see an overview across electricity, export and gas (net bill, what export paid for, where the bill goes), then per meter: what it cost on the tariff you were actually on, highlights such as your always-on load and busiest day, a weekday-by-hour heatmap, the share of your usage bought in each price band, and what every other tariff would have charged. |
+| **Settings** (cog icon) | Choose which page opens first, which tariff leads the Now page (including your own), which Now sections show and in what order, your region (with a postcode lookup) and the theme. |
 
 There is a "Try with sample data" button if you want to see My usage without a key.
 
@@ -34,6 +35,7 @@ Get a key from your Octopus account under Personal details → API access. The a
 - **Your own tariff** is priced at the real historic rate of each agreement on your account, so a mid-period switch is handled.
 - **Intelligent Go** publishes a day and a night rate but no times, so 23:30–05:30 is assumed. Extra smart-charging slots outside that window are not counted.
 - Gas meters that report m³ are converted at 11.19 kWh per m³ (toggle on the gas tab).
+- The "a battery could move" figure on the export overview is an upper limit: per day, the smaller of what was sold and what was bought, valued at the gap between the two prices.
 - Everything includes VAT and uses direct debit prices.
 
 ## Run locally
@@ -62,7 +64,7 @@ js/tariffs.js         London time, product classification, rate lookups, costing
 js/api.js             requests, caching, pagination, account lookup
 js/core.js            shared state, catalogue, pricing helpers, small UI builders
 js/charts.js          dependency-free SVG charts and tooltip
-js/view-*.js          the four tabs
+js/view-*.js          the four tabs and the settings page
 js/app.js             routing, region, theme, connecting an account
 service-worker.js     offline shell
 ```

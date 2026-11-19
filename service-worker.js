@@ -1,11 +1,11 @@
 // Offline shell for Oxtopus. Only this site's own files are cached.
 // Requests to other origins (the Octopus API, including any that carry an API key) are never
 // intercepted or stored: the browser handles them directly.
-const CACHE = 'oxtopus-v3';
+const CACHE = 'oxtopus-v4';
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.json', 'icon.svg',
   'js/theme.js', 'js/app.js', 'js/api.js', 'js/core.js', 'js/tariffs.js', 'js/charts.js',
-  'js/view-now.js', 'js/view-tariffs.js', 'js/view-compare.js',
+  'js/view-now.js', 'js/view-tariffs.js', 'js/view-compare.js', 'js/view-usage.js', 'js/view-settings.js',
 ];
 
 self.addEventListener('install', (event) => {

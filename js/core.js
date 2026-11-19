@@ -32,7 +32,33 @@ function initialRegion() {
 // Filled in by app.js: render(), go(view), connect(key, account, remember), sample(), disconnect().
 export const hooks = {};
 
+// What the visitor has customised. Unknown sections are dropped and new ones appended, so old saves keep working.
+export const NOW_SECTIONS = [
+  { id: 'mine', label: 'Your latest day', note: 'Shown once an account is connected' },
+  { id: 'chart', label: 'Agile half-hourly prices' },
+  { id: 'windows', label: 'Cheapest times to run things', half: true },
+  { id: 'rates', label: 'Unit rate right now', half: true },
+  { id: 'tracker', label: 'Tracker' },
+  { id: 'grid', label: 'The grid right now' },
+];
+export const START_PAGES = [{ v: 'now', label: 'Now' }, { v: 'tariffs', label: 'Tariffs' }, { v: 'compare', label: 'Compare' }, { v: 'usage', label: 'My usage' }];
+
+function loadPrefs() {
+  const saved = store.get('prefs', {}) || {};
+  const known = NOW_SECTIONS.map((s) => s.id);
+  const order = (Array.isArray(saved.order) ? saved.order : []).filter((id) => known.includes(id));
+  for (const id of known) if (!order.includes(id)) order.push(id);
+  return {
+    start: START_PAGES.some((p) => p.v === saved.start) ? saved.start : 'now',
+    headline: typeof saved.headline === 'string' ? saved.headline : 'agile',
+    order,
+    hidden: (Array.isArray(saved.hidden) ? saved.hidden : []).filter((id) => known.includes(id)),
+  };
+}
+export const savePrefs = () => store.set('prefs', state.prefs);
+
 export const state = {
+  prefs: loadPrefs(),
   region: initialRegion(),
   creds: null, // { key, account } while connected; never written anywhere but this browser
   connecting: null,
@@ -47,7 +73,8 @@ export const state = {
   agileDir: 'import',
   filter: 'all',
   chartOn: new Set(store.get('chartOn', ['flexible', 'agile', 'tracker', 'go', 'cosy'])),
-  usageKind: 'import',
+  usageKind: 'overview',
+  todMode: 'day',
   dailyMetric: 'kwh',
   gasUnit: store.get('gasUnit', 'm3'),
 };
@@ -208,7 +235,7 @@ export async function priceProduct(p, kind, cons) {
 }
 
 /** What the account actually paid: each half hour priced on whichever agreement was live at the time. */
-export async function actualCost(cons, agreements, kind) {
+export async function actualCost(cons, agreements, kind, each) {
   const from = cons[0].s, to = cons[cons.length - 1].s + T.HALF;
   const merged = { unit: 0, standing: 0, total: 0, kwh: 0, missing: 0, days: [], codes: [], note: '' };
   const byDay = new Map();
@@ -226,7 +253,7 @@ export async function actualCost(cons, agreements, kind) {
         api.standingCharges(a.tariff_code, lo, hi, { ttl: 3600000 }),
       ]);
       if (rate.assumedWindow) merged.note = 'Your tariff publishes day and night rates without times, so the night window is assumed.';
-      c = T.cost(sub, rate, kind === 'export' ? null : sc);
+      c = T.cost(sub, rate, kind === 'export' ? null : sc, each);
     } catch {
       c = T.cost(sub, T.intervalLookup([]), null);
     }
@@ -245,6 +272,14 @@ export async function actualCost(cons, agreements, kind) {
   }
   merged.days = [...byDay.values()].sort((a, b) => a.ts - b.ts);
   return merged;
+}
+
+/** Friendly name for a tariff code, including products that are no longer on sale. */
+export function productName(tariffCode) {
+  const t = T.parseTariffCode(tariffCode);
+  if (!t) return tariffCode;
+  const p = state.cat.products.find((x) => x.code === t.product);
+  return p ? p.label : T.familyOf(t.product).short + ' (' + t.product + ')';
 }
 
 /* ---------- account ---------- */
@@ -283,11 +318,11 @@ export function parseAccount(json) {
 export function sampleAccount() {
   const since = new Date(Date.now() - 800 * T.DAY).toISOString();
   const ag = (code) => [{ tariff_code: code, valid_from: since, valid_to: null }];
-  const agile = tf(primary('agile')), flex = tf(primary('flexible'));
+  const agile = tf(primary('agile')), flex = tf(primary('flexible')), out = tf(primary('outgoing'));
   return {
     number: 'Sample household',
     import: agile.e1 ? { point: 'sample', serials: ['sample'], agreements: ag(agile.e1.code) } : null,
-    export: null,
+    export: out.e1 ? { point: 'sample', serials: ['sample'], agreements: ag(out.e1.code) } : null,
     gas: flex.g ? { point: 'sample', serials: ['sample'], agreements: ag(flex.g.code) } : null,
   };
 }
@@ -306,7 +341,7 @@ export function loadUsage(kind, days, key) {
     const meter = state.acct[kind];
     const now = Date.now();
     const from = T.addDays(now, -days);
-    if (state.demo) return T.sampleUsage({ days: 366, now, fuel: kind === 'gas' ? 'G' : 'E' }).filter((c) => c.s >= from);
+    if (state.demo) return T.sampleUsage({ days: 366, now, fuel: kind === 'gas' ? 'G' : kind === 'export' ? 'X' : 'E' }).filter((c) => c.s >= from);
     const sets = await Promise.all(meter.serials.map((s) =>
       api.consumption(kind === 'gas' ? 'G' : 'E', meter.point, s, from, now, key).catch((e) => { if (e.status === 401) throw e; return []; })));
     const byStart = new Map();

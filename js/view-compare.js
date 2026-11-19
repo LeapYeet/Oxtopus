@@ -1,25 +1,17 @@
-// "Compare" (typical home or your own readings against every tariff) and "My usage" (API key).
+// "Compare": a typical home or your own readings priced on every tariff. Also exports the ranking used by My usage.
 
 import * as api from './api.js';
 import * as T from './tariffs.js';
-import { h, put, columns, stepLines } from './charts.js';
+import { h, put, stepLines } from './charts.js';
 import {
-  state, store, hooks, tf, primary, flexRef, profileToday, famById, candidates, priceProduct, actualCost,
-  currentAgreement, loadUsage, GAS_M3_TO_KWH, card, fill, seg, tag, tile, delta, gbp, p1, p2, kwhFmt, loading,
+  state, store, hooks, primary, profileToday, famById, candidates, priceProduct, actualCost, loadUsage, productName,
+  card, fill, seg, tag, delta, gbp, p1, kwhFmt,
 } from './core.js';
 
-const PERIODS = [{ v: 7, label: '7 days' }, { v: 30, label: '30 days' }, { v: 90, label: '90 days' }, { v: 365, label: '12 months' }];
-const KIND_LABEL = { import: 'Electricity', export: 'Export', gas: 'Gas' };
+export const PERIODS = [{ v: 7, label: '7 days' }, { v: 30, label: '30 days' }, { v: 90, label: '90 days' }, { v: 365, label: '12 months' }];
 
-const setPeriod = (v) => { state.period = v; store.set('period', v); hooks.render(); };
-const rangeText = (cons) => T.fmtDate(cons[0].s) + ' – ' + T.fmtDate(cons[cons.length - 1].s, { year: true });
-
-function productName(tariffCode) {
-  const t = T.parseTariffCode(tariffCode);
-  if (!t) return tariffCode;
-  const p = state.cat.products.find((x) => x.code === t.product);
-  return p ? p.label : T.familyOf(t.product).short + ' (' + t.product + ')';
-}
+export const setPeriod = (v) => { state.period = v; store.set('period', v); hooks.render(); };
+export const rangeText = (cons) => T.fmtDate(cons[0].s) + ' – ' + T.fmtDate(cons[cons.length - 1].s, { year: true });
 
 /* ---------- ranking ---------- */
 
@@ -27,7 +19,7 @@ function productName(tariffCode) {
  * rows: priced products. base: the row everything is measured against (your tariff, or Flexible).
  * factor scales period totals (e.g. 30 days -> a year). Returns DOM nodes.
  */
-function ranking({ rows, base, kind, factor = 1, per = '' }) {
+export function ranking({ rows, base, kind, factor = 1, per = '' }) {
   const lowerGood = kind !== 'export';
   const all = rows.slice();
   if (base && !all.includes(base)) all.push(base);
@@ -82,11 +74,11 @@ function ranking({ rows, base, kind, factor = 1, per = '' }) {
   return [headline, list];
 }
 
-async function priceAll(kind, cons) {
+export async function priceAll(kind, cons) {
   return (await api.pool(candidates(kind), (p) => priceProduct(p, kind, cons), 4)).filter((r) => r && r.kwh > 0);
 }
 
-const BASIS = 'Agile and Tracker are priced at the real rate for every half hour. Other tariffs use today’s prices, '
+export const BASIS = 'Agile and Tracker are priced at the real rate for every half hour. Other tariffs use today’s prices, '
   + 'because that is what you would get by switching now. All prices include VAT.';
 
 /* ---------- Compare ---------- */
@@ -179,186 +171,14 @@ export function viewCompare(root, alive) {
   return Promise.allSettled(jobs);
 }
 
-function youRow(actual) {
+export function youRow(actual) {
   const names = [...new Set(actual.codes.map(productName))];
   return { ...actual, label: 'Your tariff', inline: 'your tariff', sub: names.join(', then '), isYou: true, needs: '' };
 }
 
 /** When you were on one tariff all period, hide its duplicate candidate row. */
-function dropOwn(rows, actual) {
+export function dropOwn(rows, actual) {
   if (actual.codes.length !== 1) return rows;
   const t = T.parseTariffCode(actual.codes[0]);
   return rows.filter((r) => !t || r.p.code !== t.product);
-}
-
-/* ---------- My usage ---------- */
-
-function connectForm() {
-  const key = h('input', { type: 'password', id: 'apikey', name: 'apikey', autocomplete: 'off', spellcheck: 'false', placeholder: 'sk_live_…', required: true });
-  const acc = h('input', { type: 'text', id: 'accno', name: 'accno', autocomplete: 'off', spellcheck: 'false', placeholder: 'A-1234ABCD' });
-  const remember = h('input', { type: 'checkbox', id: 'remember', checked: true });
-  const msg = h('p', { class: 'form-msg', role: 'alert' });
-  const submit = h('button', { type: 'submit', class: 'btn primary', text: 'Connect' });
-  const form = h('form', { class: 'connect', onsubmit: async (e) => {
-    e.preventDefault();
-    msg.textContent = '';
-    submit.disabled = true;
-    submit.textContent = 'Connecting…';
-    try {
-      await hooks.connect(key.value, acc.value, remember.checked);
-      hooks.render();
-    } catch (err) {
-      msg.textContent = err.message;
-      submit.disabled = false;
-      submit.textContent = 'Connect';
-    }
-  } },
-  h('label', { for: 'apikey', text: 'API key' }), key,
-  h('p', { class: 'fine' }, 'Find it in your Octopus account under ',
-    h('a', { href: 'https://octopus.energy/dashboard/new/accounts/personal-details/api-access', target: '_blank', rel: 'noopener noreferrer', text: 'Personal details → API access' }), '.'),
-  h('label', { for: 'accno' }, 'Account number ', h('span', { class: 'muted', text: '(optional)' })), acc,
-  h('p', { class: 'fine', text: 'Leave blank to look it up from the key. It is on your bill and starts with A-.' }),
-  h('label', { class: 'check' }, remember, 'Remember on this device'),
-  msg,
-  h('div', { class: 'row' }, submit,
-    h('button', { type: 'button', class: 'btn', onclick: () => hooks.sample(), text: 'Try with sample data' })));
-  return form;
-}
-
-function connectView(root) {
-  root.append(
-    h('div', { class: 'page-head' }, h('h1', { text: 'My usage' }),
-      h('p', { class: 'card-sub', text: 'See what you used, what it cost, and what every other tariff would have charged.' })),
-    h('div', { class: 'grid two' },
-      h('section', { class: 'card' }, h('header', { class: 'card-head' }, h('div', {}, h('h2', { text: 'Connect your Octopus account' }))), connectForm()),
-      h('section', { class: 'card' },
-        h('header', { class: 'card-head' }, h('div', {}, h('h2', { text: 'Where your key goes' }))),
-        h('ul', { class: 'bullets' },
-          h('li', { text: 'Your key stays in this browser. It is sent only to api.octopus.energy, straight from your device.' }),
-          h('li', { text: 'This site has no server, no analytics and no third-party scripts, so nobody else can see it.' }),
-          h('li', { text: 'The key is read-only: it can see readings and tariffs, and cannot change your account.' }),
-          h('li', { text: 'Untick “Remember” to keep it for this tab only. “Disconnect” removes it at any time.' }),
-          h('li', { text: 'You can revoke the key from the same Octopus page whenever you like.' })))));
-  return Promise.resolve();
-}
-
-export function viewUsage(root, alive) {
-  if (state.connecting) {
-    root.append(loading('Connecting to your Octopus account…'));
-    return state.connecting.then(() => { if (alive()) hooks.render(); }, () => { if (alive()) hooks.render(); });
-  }
-  if (!state.acct) return connectView(root);
-
-  const kinds = ['import', 'export', 'gas'].filter((k) => state.acct[k]);
-  if (!kinds.includes(state.usageKind)) state.usageKind = kinds[0];
-  const kind = state.usageKind;
-  const meter = state.acct[kind];
-  const cur = currentAgreement(meter.agreements);
-  const masked = state.demo ? state.acct.number : state.acct.number.replace(/^(A-)(.*)(.{4})$/, (_, a, mid, end) => a + '•'.repeat(mid.length) + end);
-
-  const filters = h('div', { class: 'filters' }, seg(PERIODS, state.period, setPeriod, 'Period'));
-  if (kinds.length > 1) filters.append(seg(kinds.map((k) => ({ v: k, label: KIND_LABEL[k] })), kind, (v) => { state.usageKind = v; hooks.render(); }, 'Meter'));
-  if (kind === 'gas' && !state.demo) {
-    filters.append(seg([{ v: 'm3', label: 'Meter reads m³' }, { v: 'kwh', label: 'Meter reads kWh' }], state.gasUnit,
-      (v) => { state.gasUnit = v; store.set('gasUnit', v); hooks.render(); }, 'Gas meter units'));
-  }
-
-  put(root,
-    h('div', { class: 'page-head split' },
-      h('div', {}, h('h1', { text: 'My usage' }),
-        h('p', { class: 'card-sub', text: masked + (cur ? ' · ' + productName(cur.tariff_code) : '') })),
-      h('button', { class: 'btn', onclick: () => hooks.disconnect(), text: state.demo ? 'Close sample' : 'Disconnect' })),
-    state.demo ? h('p', { class: 'banner' }, h('strong', { text: 'Sample data. ' }), 'A made-up household with an EV on Agile, so you can see how this works. ',
-      h('button', { class: 'link', onclick: () => hooks.disconnect(), text: 'Connect your own account' }), '.') : null,
-    filters);
-
-  const body = h('div', { class: 'stack' });
-  root.append(body);
-  return fill(body, alive, () => usagePanel(kind, meter));
-}
-
-async function usagePanel(kind, meter) {
-  let cons = await loadUsage(kind, state.period, state.creds && state.creds.key);
-  if (kind === 'gas' && !state.demo && state.gasUnit === 'm3') cons = cons.map((c) => ({ s: c.s, kwh: c.kwh * GAS_M3_TO_KWH }));
-  if (!cons.length) {
-    return h('section', { class: 'card' }, h('p', { class: 'empty', text: 'No half-hourly readings for this period. '
-      + 'Readings usually arrive a day behind, and some meters only send them once the smart meter is fully set up.' }));
-  }
-  const lowerGood = kind !== 'export';
-  const [rows, actual] = await Promise.all([priceAll(kind, cons), actualCost(cons, meter.agreements, kind)]);
-  const days = actual.days.length || 1;
-  const flex = kind === 'export' ? null : rows.find((r) => r.p === primary('flexible'));
-  const priced = actual.kwh - actual.missing;
-
-  const tiles = h('div', { class: 'tiles four' },
-    tile(kind === 'export' ? 'Exported' : 'Used', kwhFmt(actual.kwh), (actual.kwh / days).toFixed(1) + ' kWh a day'),
-    tile(kind === 'export' ? 'Earned' : 'Cost', gbp(actual.total), lowerGood ? 'including ' + gbp(actual.standing) + ' standing charge' : gbp(actual.total / days) + ' a day'),
-    tile(kind === 'export' ? 'Average paid' : 'Average unit rate', priced > 0 ? p1(actual.unit / priced) : '–',
-      lowerGood && priced > 0 ? p1(actual.total / priced) + ' with standing charge' : 'per kWh'),
-    flex ? tile('Against Flexible', gbp(Math.abs(flex.total - actual.total)), flex.total >= actual.total ? '▼ less than Flexible would have cost' : '▲ more than Flexible would have cost',
-      flex.total >= actual.total ? 'good' : 'bad')
-      : tile('Days of data', String(days), rangeText(cons)));
-
-  /* daily chart */
-  const daily = card(kind === 'export' ? 'Export by day' : 'Usage by day', { sub: rangeText(cons) + ' · readings up to ' + T.fmtTime(cons[cons.length - 1].s + T.HALF) + ' on ' + T.fmtDate(cons[cons.length - 1].s + T.HALF, { dow: true }) });
-  const dailyBox = h('div', { class: 'chart-box' });
-  const dailyTools = h('div', { class: 'card-tools' });
-  daily.el.querySelector('.card-head').append(dailyTools);
-  daily.body.append(dailyBox);
-  const weekly = actual.days.length > 100;
-  const buckets = [];
-  for (const d of actual.days) {
-    const last = buckets[buckets.length - 1];
-    if (weekly && last && last.n < 7) { last.kwh += d.kwh; last.cost += d.unit + d.sc; last.n++; last.end = d.ts; } else buckets.push({ ts: d.ts, end: d.ts, kwh: d.kwh, cost: d.unit + d.sc, n: 1 });
-  }
-  const drawDaily = () => {
-    const money = state.dailyMetric === 'cost';
-    put(dailyTools, seg([{ v: 'kwh', label: 'kWh' }, { v: 'cost', label: '£' }], state.dailyMetric, (v) => { state.dailyMetric = v; drawDaily(); }, 'Measure'));
-    const every = Math.max(1, Math.ceil(buckets.length / 6));
-    columns(dailyBox, buckets.map((b) => ({
-      v: money ? b.cost / 100 : b.kwh, cls: kind === 'export' ? 'b-export' : 's-usage',
-      tipTitle: weekly ? T.fmtDate(b.ts) + ' – ' + T.fmtDate(b.end) : T.fmtDate(b.ts, { dow: true }),
-      tipRows: [{ value: kwhFmt(b.kwh), label: kind === 'export' ? 'exported' : 'used' }, { value: gbp(b.cost), label: lowerGood ? 'cost' : 'earned' }],
-    })), {
-      height: 240, fmtY: (v) => (money ? '£' + v : String(v)),
-      xTicks: buckets.map((b, i) => (i % every === 0 ? { i, label: T.fmtDate(b.ts) } : null)).filter(Boolean),
-      label: (weekly ? 'Weekly ' : 'Daily ') + (money ? 'cost' : 'energy'),
-    });
-  };
-
-  /* time of day */
-  const slots = new Array(48).fill(0);
-  for (const c of cons) slots[T.slotOf(c.s)] += c.kwh;
-  const share = (a, b) => (slots.slice(a, b).reduce((x, y) => x + y, 0) / (actual.kwh || 1)) * 100;
-  const tod = card(kind === 'export' ? 'When you export' : 'When you use it', { sub: 'Average kWh in each half hour of the day' });
-  const todBox = h('div', { class: 'chart-box' });
-  const todNote = kind === 'import'
-    ? share(0, 14).toFixed(0) + '% falls overnight (00:00–07:00) and ' + share(32, 38).toFixed(0)
-      + '% in the 16:00–19:00 peak. Shifting use out of the peak is what makes Agile, Go and Cosy pay off.'
-    : kind === 'export'
-      ? share(32, 38).toFixed(0) + '% of your export lands in the 16:00–19:00 peak, when Agile Outgoing and Flux pay the most.'
-      : '';
-  tod.body.append(todBox);
-  if (todNote) tod.body.append(h('p', { class: 'fine', text: todNote }));
-  const drawTod = () => columns(todBox, slots.map((v, s) => ({
-    v: v / days, cls: kind === 'export' ? 'b-export' : 's-usage',
-    tipTitle: T.slotLabel(s) + '–' + T.slotLabel((s + 1) % 48),
-    tipRows: [{ value: (v / days).toFixed(2) + ' kWh', label: 'average' }],
-  })), {
-    height: 220, fmtY: (v) => String(v),
-    xTicks: [0, 12, 24, 36].map((i) => ({ i, edge: true, label: T.slotLabel(i) })),
-    label: 'Average energy by time of day',
-  });
-
-  /* ranking */
-  const rank = card(kind === 'export' ? 'What each export tariff would have paid' : 'What each tariff would have cost', { sub: kwhFmt(actual.kwh) + ' · ' + rangeText(cons) });
-  rank.body.append(...ranking({ rows: dropOwn(rows, actual), base: youRow(actual), kind }),
-    h('p', { class: 'fine', text: (kind === 'gas' ? 'Tracker is priced at the real rate for every day. Other tariffs use today’s prices. All prices include VAT.'
-      : kind === 'export' ? 'Agile Outgoing is priced at the real rate for every half hour. Other export tariffs use today’s prices.' : BASIS)
-      + (actual.note ? ' ' + actual.note : '')
-      + (actual.missing > 0.02 * actual.kwh ? ' Some of your readings fall where no rate is published, so your own total is incomplete.' : '')
-      + (kind === 'gas' && !state.demo && state.gasUnit === 'm3' ? ' Gas converted from m³ at ' + GAS_M3_TO_KWH.toFixed(2) + ' kWh per m³.' : '') }));
-
-  queueMicrotask(() => { drawDaily(); drawTod(); });
-  return [tiles, daily.el, tod.el, rank.el];
 }

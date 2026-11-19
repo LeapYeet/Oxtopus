@@ -169,6 +169,12 @@ export async function standingCharges(tariffCode, from, to, opts = {}) {
 export const productList = () => get(BASE + '/products/?page_size=250', { ttl: 6 * 3600000, persist: true });
 export const productDetail = (code) => get(BASE + '/products/' + code + '/', { ttl: 6 * 3600000 });
 
+/** Region letters (e.g. ['M']) for a postcode. A partial postcode can straddle two regions. */
+export async function regionsForPostcode(postcode) {
+  const data = await get(BASE + '/industry/grid-supply-points/?postcode=' + encodeURIComponent(postcode.replace(/\s+/g, '').toUpperCase()), { ttl: 3600000 });
+  return [...new Set((data.results || []).map((r) => String(r.group_id || '').replace('_', '')).filter(Boolean))];
+}
+
 /* ---------- account ---------- */
 
 async function gql(query, variables, token) {

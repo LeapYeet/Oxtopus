@@ -233,8 +233,9 @@ export function dayProfile(lookup, midnight) {
  * Price a consumption series.
  * cons: [{s, kwh}] with s = interval start (ms). rate/sc: lookups returning pence.
  * Returns pence totals plus a per-London-day breakdown; `missing` counts kWh with no published rate.
+ * `each(reading, rate)` is called for every priced reading (used to split usage by price band).
  */
-export function cost(cons, rate, sc) {
+export function cost(cons, rate, sc, each) {
   const days = new Map();
   let unit = 0, kwh = 0, missing = 0;
   for (const c of cons) {
@@ -245,6 +246,7 @@ export function cost(cons, rate, sc) {
     d.kwh += c.kwh;
     kwh += c.kwh;
     if (Number.isNaN(r)) { missing += c.kwh; continue; }
+    if (each) each(c, r);
     d.unit += c.kwh * r;
     unit += c.kwh * r;
   }
@@ -285,12 +287,74 @@ export function toHalfHours(intervals, from, to) {
   return out;
 }
 
+/* ---------- usage statistics ---------- */
+
+const quantile = (sorted, q) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] : NaN);
+
+/**
+ * Facts about a half-hourly series, all in London time.
+ * Day-level extremes only consider complete days (at least 46 of 48 readings), so a part-day never "wins".
+ */
+export function usageStats(cons) {
+  const byDay = new Map();
+  const slots = new Array(48).fill(0);
+  const grid = Array.from({ length: 7 }, () => new Array(24).fill(0)); // [Mon..Sun][hour] total kWh
+  let total = 0, peak = null;
+  for (const c of cons) {
+    const d = shifted(c.s);
+    const key = d.toISOString().slice(0, 10);
+    let day = byDay.get(key);
+    if (!day) { day = { key, ts: londonMidnight(c.s), kwh: 0, n: 0, dow: (d.getUTCDay() + 6) % 7 }; byDay.set(key, day); }
+    day.kwh += c.kwh;
+    day.n++;
+    total += c.kwh;
+    slots[d.getUTCHours() * 2 + (d.getUTCMinutes() >= 30 ? 1 : 0)] += c.kwh;
+    grid[day.dow][d.getUTCHours()] += c.kwh;
+    if (!peak || c.kwh > peak.kwh) peak = c;
+  }
+  const days = [...byDay.values()].sort((a, b) => a.ts - b.ts);
+  const full = days.filter((d) => d.n >= 46);
+  const dowDays = new Array(7).fill(0);
+  for (const d of days) dowDays[d.dow] += d.n / 48;
+  const mean = (list) => (list.length ? list.reduce((a, d) => a + d.kwh, 0) / list.length : NaN);
+  const sorted = cons.map((c) => c.kwh).sort((a, b) => a - b);
+  return {
+    total, days, fullDays: full.length,
+    busiest: full.reduce((a, d) => (!a || d.kwh > a.kwh ? d : a), null),
+    quietest: full.reduce((a, d) => (!a || d.kwh < a.kwh ? d : a), null),
+    weekdayAvg: mean(full.filter((d) => d.dow < 5)),
+    weekendAvg: mean(full.filter((d) => d.dow >= 5)),
+    activeDays: full.filter((d) => d.kwh > 0.05).length,
+    peak, // the single largest half hour
+    baseKw: quantile(sorted, 0.1) * 2, // the level usage rarely drops below
+    slotAvg: slots.map((v) => v / (days.reduce((a, d) => a + d.n, 0) / 48 || 1)),
+    slotTotal: slots,
+    grid: grid.map((row, i) => row.map((v) => (dowDays[i] ? v / dowDays[i] : 0))), // average kWh in that hour
+  };
+}
+
+/** Month-by-month totals from a per-day breakdown ([{ts, kwh, unit, sc}]). */
+export function byMonth(days) {
+  const out = new Map();
+  for (const d of days) {
+    const k = dayKey(d.ts + 12 * HOUR).slice(0, 7);
+    let m = out.get(k);
+    if (!m) { m = { key: k, label: MON[Number(k.slice(5)) - 1] + ' ' + k.slice(0, 4), kwh: 0, cost: 0, days: 0 }; out.set(k, m); }
+    m.kwh += d.kwh;
+    m.cost += (d.unit || 0) + (d.sc || 0);
+    m.days++;
+  }
+  return [...out.values()];
+}
+
+export const DOW_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
 /* ---------- price bands ---------- */
 
 export const BANDS = {
   plunge: 'Plunge',
   cheap: 'Cheap',
-  fair: 'Below Flexible',
+  fair: 'Flexible or less',
   pricey: 'Above Flexible',
   peak: 'Peak',
 };
@@ -299,7 +363,7 @@ export const BANDS = {
 export function bandOf(p, ref) {
   if (p <= 0) return 'plunge';
   if (p < ref * 0.5) return 'cheap';
-  if (p < ref) return 'fair';
+  if (p <= ref + 0.005) return 'fair';
   if (p < ref * 1.5) return 'pricey';
   return 'peak';
 }
@@ -342,9 +406,9 @@ function mulberry32(a) {
   };
 }
 
-/** A made-up household (EV charged a few nights a week, heavier in winter) for the "sample data" mode. */
+/** A made-up household (EV charged a few nights a week, heavier in winter; fuel 'G' gas, 'X' solar export). */
 export function sampleUsage({ days = 366, now, fuel = 'E' }) {
-  const rnd = mulberry32(fuel === 'G' ? 77 : 20261119);
+  const rnd = mulberry32(fuel === 'G' ? 77 : fuel === 'X' ? 4242 : 20261119);
   const end = londonMidnight(now) - DAY; // smart-meter data usually trails by a day
   const start = addDays(end, -days);
   const out = [];
@@ -353,9 +417,14 @@ export function sampleUsage({ days = 366, now, fuel = 'E' }) {
     const s = slotOf(ts);
     const doy = (ts - Date.UTC(new Date(ts).getUTCFullYear(), 0, 1)) / DAY;
     const winter = (Math.cos(((doy - 15) / 365) * 2 * Math.PI) + 1) / 2; // 1 mid-January, 0 mid-July
-    if (s === 0) evTonight = rnd() < 0.45;
+    if (s === 0 && fuel !== 'X') evTonight = rnd() < 0.45;
     let kwh;
-    if (fuel === 'G') {
+    if (fuel === 'X') {
+      // Rooftop solar surplus: a midday bell, strong in summer, with a different amount of cloud each day.
+      if (s === 0) evTonight = rnd();
+      const sun = Math.max(0, Math.sin(((s - 15) / 22) * Math.PI));
+      kwh = Math.max(0, sun * (0.12 + 1.25 * (1 - winter)) * (0.25 + 0.75 * evTonight) * (0.8 + 0.4 * rnd()) - 0.08);
+    } else if (fuel === 'G') {
       const heat = s >= 12 && s < 18 ? 1.6 : s >= 32 && s < 44 ? 1.4 : 0.25;
       kwh = (0.12 + 1.35 * winter * winter) * heat * (0.7 + 0.6 * rnd());
     } else {
