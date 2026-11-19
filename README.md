@@ -1,57 +1,82 @@
-# Octopus Agile – Margins & Tomorrow Data
+# Oxtopus
 
-A web app for visualizing **Octopus Agile** electricity prices, regional tariff breakdowns, tomorrow's pricing (when available), current energy mix, and UK wind/solar forecasts. Designed with a clean dark theme and supports offline use with PWA support.
+Live Octopus Energy prices, every tariff side by side, and a comparison against your own smart meter readings.
 
-## 🚀 Features
+**Live site:** https://leapyeet.github.io/Oxtopus/
 
-- 📈 Real-time Agile electricity pricing with emoji and color indicators
-- 🕒 Half-hourly price tables for **today** and **tomorrow**
-- 📊 Dynamic bar charts for visualising price variation
-- 🌍 Live UK energy generation mix (Carbon Intensity API)
-- 🌞 Wind and solar forecast for the next 3 days (Open-Meteo API)
-- 🌐 Region selector (all UK Agile regions supported)
-- 📲 PWA support – install to home screen like a native app
-- 🧪 Debug panel and referral link section
+Unofficial. Not affiliated with or endorsed by Octopus Energy.
 
-## 🔧 Setup & Usage
+## What it does
 
-### 📦 Requirements
+| Tab | What you get |
+| --- | --- |
+| **Now** | The current Agile price, the next two days of half-hourly prices (import and export), the cheapest windows to run things, today's Tracker electricity and gas prices with 30 days of history, what every tariff charges this half hour, and the GB generation mix. |
+| **Tariffs** | Every Octopus product from the live API: unit rates, standing charge, gas rates, exit fees, and a 24-hour strip showing when each tariff is cheap. Filter by smart, EV, heating, solar and battery, fixed, export and more. |
+| **Compare** | What each tariff would cost for a typical home (pick annual usage and EV charging) or for your own readings, plus a chart of each tariff's rate through the day. |
+| **My usage** | Add your Octopus API key to see what you used, what it cost on the tariff you were actually on, when in the day you use it, and what every other tariff would have charged. Works for electricity, export and gas. |
 
-- Any modern web browser (Chrome, Firefox, Edge, etc.)
-- [Optional] A web server (e.g., `Live Server` in VS Code or host via GitHub Pages)
+There is a "Try with sample data" button if you want to see My usage without a key.
 
-### ▶️ Run Locally
+## Your API key
 
-1. Clone or download the repo
-2. Open `index.html` in your browser
-3. That’s it! No build step required.
+- The key is stored only in your browser and is sent only to `api.octopus.energy`, straight from your device.
+- The site is static files on GitHub Pages. There is no server, no analytics and no third-party script.
+- A Content Security Policy in `index.html` limits scripts to this site and network requests to the three APIs listed below.
+- The service worker caches only the site's own files. It never touches API requests.
+- Untick "Remember on this device" to keep the key for the current tab only. "Disconnect" removes it.
 
-### 🧠 Customization
+Get a key from your Octopus account under Personal details → API access. The account number is optional: the site looks it up from the key.
 
-- Change the **Agile product code** in the script tag if Octopus updates to a new one:
-  ```js
-  const AGILE_PRODUCT_CODE = 'AGILE-24-10-01';
-  ```
-- If you're outside the UK, you can adapt or replace the Carbon Intensity and Open-Meteo APIs.
+## How the comparison is priced
 
-### 🛠 PWA Support
+- **Agile and Tracker** use the real published rate for every half hour (or day) in the period.
+- **Every other tariff** uses today's prices and time windows, because that is what you would get by switching now.
+- **Your own tariff** is priced at the real historic rate of each agreement on your account, so a mid-period switch is handled.
+- **Intelligent Go** publishes a day and a night rate but no times, so 23:30–05:30 is assumed. Extra smart-charging slots outside that window are not counted.
+- Gas meters that report m³ are converted at 11.19 kWh per m³ (toggle on the gas tab).
+- Everything includes VAT and uses direct debit prices.
 
-- The app supports offline viewing via a `service-worker.js` and `manifest.json`
-- A minimal **"Add to Home Screen"** prompt will appear on supported devices
-- Make sure to serve over HTTPS for full PWA functionality
+## Run locally
 
-## 📡 APIs Used
+No build step. Serve the folder with any static server:
 
-- 🔌 [Octopus Energy API](https://developer.octopus.energy/)
-- 🧪 [Carbon Intensity UK (National Grid ESO)](https://carbon-intensity.github.io/)
-- ☀️ [Open-Meteo API](https://open-meteo.com/)
+```sh
+python3 -m http.server 8765
+# then open http://localhost:8765
+```
 
-## 🤝 Referral
+It needs to be served over HTTP rather than opened as a file, because it uses ES modules.
 
-Like the project? You can support the developer by switching to Octopus with this [£50 referral link](https://share.octopus.energy/eager-cliff-143).
+## Maintenance
 
-## 📄 License
+Products are read from the Octopus API at runtime, so new tariffs and new versions of Agile, Go, Cosy and the rest appear automatically.
 
-MIT License
+The one exception is **Tracker**. Octopus leaves it out of the public product list, so its product codes are listed in `TRACKER_VERSIONS` at the top of `js/tariffs.js`. When Octopus releases a new Tracker version, add its code to the top of that list.
 
----
+## Layout
+
+```
+index.html            page shell and Content Security Policy
+styles.css            all styling, light and dark themes
+js/tariffs.js         London time, product classification, rate lookups, costing (no DOM, no network)
+js/api.js             requests, caching, pagination, account lookup
+js/core.js            shared state, catalogue, pricing helpers, small UI builders
+js/charts.js          dependency-free SVG charts and tooltip
+js/view-*.js          the four tabs
+js/app.js             routing, region, theme, connecting an account
+service-worker.js     offline shell
+```
+
+## Data sources
+
+- [Octopus Energy API](https://developer.octopus.energy/)
+- [Carbon Intensity API](https://carbonintensity.org.uk/) (National Energy System Operator)
+- [Open-Meteo](https://open-meteo.com/)
+
+## Referral
+
+Not with Octopus yet? [This referral link](https://share.octopus.energy/eager-cliff-143) gives £50 credit.
+
+## License
+
+MIT

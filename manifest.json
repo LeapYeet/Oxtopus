@@ -1,16 +1,13 @@
 {
-  "name": "Octopus Agile – Margins & Tomorrow Data",
-  "short_name": "Octopus Agile",
-  "start_url": "/Oxtopus/",
-  "scope": "/Oxtopus/",
+  "name": "Oxtopus – Octopus Energy prices and tariff comparison",
+  "short_name": "Oxtopus",
+  "description": "Live Agile and Tracker prices, every Octopus tariff, and a comparison against your own usage.",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
-  "background_color": "#210035",
-  "theme_color": "#360040",
+  "background_color": "#0f0917",
+  "theme_color": "#120b1d",
   "icons": [
-    {
-      "src": "icon.svg",
-      "sizes": "192x192",
-      "type": "image/svg+xml"
-    }
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
 }

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
-  <rect width="192" height="192" fill="#210035"/>
-  <text x="50%" y="50%" fill="#FF00E5" font-family="Arial, sans-serif" font-size="96" dominant-baseline="middle" text-anchor="middle">O</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="7" fill="#f25ad9"/>
+  <path fill="#1d0619" d="M17.6 5.5 9.5 17.2h5.3l-1.6 9.3 9.3-12.6h-5.6z"/>
 </svg>

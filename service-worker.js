@@ -1,58 +1,38 @@
-const CACHE_NAME = 'octopus-agile-cache-v2';
-const urlsToCache = [
-  '/',
-  '/index.html',
-  '/manifest.json'
-  // Add additional assets (CSS, JS, images) as needed.
+// Offline shell for Oxtopus. Only this site's own files are cached.
+// Requests to other origins (the Octopus API, including any that carry an API key) are never
+// intercepted or stored: the browser handles them directly.
+const CACHE = 'oxtopus-v3';
+const SHELL = [
+  './', 'index.html', 'styles.css', 'manifest.json', 'icon.svg',
+  'js/theme.js', 'js/app.js', 'js/api.js', 'js/core.js', 'js/tariffs.js', 'js/charts.js',
+  'js/view-now.js', 'js/view-tariffs.js', 'js/view-compare.js',
 ];
 
-// Install event – cache static assets
-self.addEventListener('install', event => {
+self.addEventListener('install', (event) => {
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(urlsToCache))
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim()),
   );
 });
 
-// Fetch event – network-first for navigation, cache-first for others
-self.addEventListener('fetch', event => {
-  if (event.request.mode === 'navigate') {
-    // For HTML navigations, use network first.
-    event.respondWith(
-      fetch(event.request)
-        .then(response => {
-          return caches.open(CACHE_NAME)
-            .then(cache => {
-              cache.put(event.request, response.clone());
-              return response;
-            });
-        })
-        .catch(() => {
-          return caches.match(event.request);
-        })
-    );
-  } else {
-    // For other requests, try cache first then network.
-    event.respondWith(
-      caches.match(event.request)
-        .then(response => response || fetch(event.request))
-    );
-  }
-});
-
-// Activate event – clear out old caches
-self.addEventListener('activate', event => {
-  const cacheWhitelist = [CACHE_NAME];
-  event.waitUntil(
-    caches.keys()
-      .then(cacheNames => {
-        return Promise.all(
-          cacheNames.map(cacheName => {
-            if (!cacheWhitelist.includes(cacheName)) {
-              return caches.delete(cacheName);
-            }
-          })
-        );
+// Network first, so a new release shows up on the next visit; the cache is the offline fallback.
+self.addEventListener('fetch', (event) => {
+  const req = event.request;
+  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  event.respondWith(
+    fetch(req)
+      .then((res) => {
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy));
+        }
+        return res;
       })
+      .catch(() => caches.match(req, { ignoreSearch: true }).then((hit) => hit || caches.match('index.html'))),
   );
 });
