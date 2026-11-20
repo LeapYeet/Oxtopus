@@ -4,6 +4,7 @@ import * as api from './api.js';
 import * as T from './tariffs.js';
 import { h, put } from './charts.js';
 import { state, store, hooks, savePrefs, primary, card, seg, NOW_SECTIONS, START_PAGES } from './core.js';
+import { installGuide, watchInstall } from './install.js';
 
 const HEADLINES = ['agile', 'tracker', 'flexible', 'go', 'igo', 'cosy', 'snug', 'flux'];
 
@@ -91,6 +92,13 @@ export function viewSettings(root) {
     pcMsg,
     h('p', { class: 'fine', text: 'The postcode is sent to Octopus to look up the region and is not stored. Connecting an account sets the region automatically.' }));
 
+  /* ----- install ----- */
+  const inst = card('Install as an app', { sub: 'Its own icon and window, opening on your start page. No app store, and it updates itself.' });
+  const drawInst = () => put(inst.body, installGuide());
+  drawInst();
+  // The browser offers its install prompt a moment after the page loads, so redraw when it arrives.
+  watchInstall('settings', () => { if (inst.el.isConnected) drawInst(); });
+
   /* ----- appearance ----- */
   const look = card('Appearance', {});
   const drawLook = () => put(look.body, seg([{ v: 'system', label: 'Match device' }, { v: 'light', label: 'Light' }, { v: 'dark', label: 'Dark' }],
@@ -112,6 +120,6 @@ export function viewSettings(root) {
       h('p', { class: 'card-sub', text: 'Make Oxtopus yours. Changes save as you make them, in this browser only.' })),
     h('div', { class: 'grid two' }, start.el, head.el),
     secs.el,
-    h('div', { class: 'grid two' }, region.el, h('div', { class: 'stack' }, look.el, data.el)));
+    h('div', { class: 'grid two' }, h('div', { class: 'stack' }, region.el, data.el), h('div', { class: 'stack' }, look.el, inst.el)));
   return Promise.resolve();
 }

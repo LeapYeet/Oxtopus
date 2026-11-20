@@ -395,6 +395,23 @@ tr.is-now td { background: var(--accent-wash); }
 a.btn { text-decoration: none; color: var(--text); display: inline-flex; align-items: center; }
 a.btn.small { margin-left: 0; }
 
+/* ---------- install as an app ---------- */
+
+.install-hint { width: 100%; max-width: 1120px; margin: 0 auto; padding: 14px 16px 0; }
+.install-hint[hidden] { display: none; }
+.install-in { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; background: var(--accent-wash); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 12px; padding: 8px 10px 8px 14px; font-size: 0.9rem; }
+.install-in > p { flex: 1 1 240px; }
+.install-acts { display: flex; align-items: center; gap: 8px; flex: none; }
+.install-acts .btn.small { margin-left: 0; padding: 5px 12px; }
+.install-steps { flex: 1 1 100%; padding: 2px 0 6px; }
+.steps { padding-left: 1.3em; display: flex; flex-direction: column; gap: 6px; }
+.steps li::marker { color: var(--muted); font-weight: 600; }
+.steps-head { margin: 14px 0 6px; }
+.row.first { margin-top: 0; }
+.card-body > .steps-head:first-child { margin-top: 0; }
+details.more { margin-top: 14px; }
+details.more > summary { cursor: pointer; color: var(--text-2); font-size: 0.86rem; font-weight: 550; width: fit-content; }
+
 /* ---------- usage insights ---------- */
 
 .tiles.facts-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }

@@ -18,6 +18,8 @@ Unofficial. Not affiliated with or endorsed by Octopus Energy.
 
 There is a "Try with sample data" button if you want to see My usage without a key.
 
+Oxtopus can be installed as an app from the browser. A tip under the header offers an Install button where the browser supports one, or the steps for that browser otherwise, and Settings lists the steps for every device.
+
 ## Your API key
 
 - The key is stored only in your browser and is sent only to `api.octopus.energy`, straight from your device.
@@ -65,6 +67,7 @@ js/api.js             requests, caching, pagination, account lookup
 js/core.js            shared state, catalogue, pricing helpers, small UI builders
 js/charts.js          dependency-free SVG charts and tooltip
 js/view-*.js          the four tabs and the settings page
+js/install.js         install-as-an-app tip and per-browser steps
 js/app.js             routing, region, theme, connecting an account
 service-worker.js     offline shell
 ```

@@ -9,12 +9,17 @@ import { viewTariffs } from './view-tariffs.js';
 import { viewCompare } from './view-compare.js';
 import { viewUsage } from './view-usage.js';
 import { viewSettings } from './view-settings.js';
+import { drawInstallHint, watchInstall } from './install.js';
 
 const VIEWS = { now: viewNow, tariffs: viewTariffs, compare: viewCompare, usage: viewUsage, settings: viewSettings };
 // No hash means "home", which is whichever page the visitor chose as their start page.
 const viewFromHash = () => { const v = location.hash.slice(1); return VIEWS[v] ? v : state.prefs.start; };
 const main = document.getElementById('view');
 const regionSel = document.getElementById('region');
+const hintEl = document.getElementById('install-hint');
+// Settings has the full install guide, so the one-line tip steps aside there.
+const syncInstallHint = () => drawInstallHint(hintEl, { hide: state.view === 'settings' });
+watchInstall('hint', syncInstallHint);
 let seq = 0;
 
 /* ---------- rendering ---------- */
@@ -60,6 +65,7 @@ function syncHeader() {
   document.getElementById('acct-dot').classList.toggle('on', !!state.acct);
   document.getElementById('settings-link').classList.toggle('on', state.view === 'settings');
   document.querySelector('.brand').setAttribute('href', '#' + state.prefs.start);
+  syncInstallHint();
 }
 
 function go(view) {
